@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tactical Zone & Search Corridor Planner</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6NiYuURxVw1bV4S0rF2rD61t9c54gq0xZk0S8YV0N24y25n0y5q+R3w/2qJ2k" crossorigin="anonymous" />
+
+  <style>
+    :root {
+      --bg-dark: #080c14;
+      --panel-bg: rgba(13, 20, 36, 0.88);
+      --panel-border: rgba(0, 240, 255, 0.2);
+      --panel-border-glow: rgba(0, 240, 255, 0.4);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-cyan: #00f0ff;
+      --accent-red: #ff3b30;
+      --accent-amber: #ff9500;
+      --accent-green: #34c759;
+      --accent-blue: #3b82f6;
+      --font-heading: 'Chakra Petch', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-body);
+      background: var(--bg-dark);
+      color: var(--text-main);
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      background: #090d16;
+    }
+
+    /* Custom Leaflet Styling */
+    .leaflet-container {
+      font-family: var(--font-body);
+    }
+
+    .leaflet-bar a {
+      background-color: var(--panel-bg) !important;
+      color: var(--accent-cyan) !important;
+      border-color: var(--panel-border) !important;
+      backdrop-filter: blur(12px);
+    }
+    .leaflet-bar a:hover {
+      background-color: rgba(0, 240, 255, 0.15) !important;
+      color: #ffffff !important;
+    }
+
+    /* Floating UI Panels */
+    .tactical-panel {
+      position: absolute;
+      z-index: 1000;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 15px rgba(0, 240, 255, 0.08);
+      transition: all 0.25s ease;
+    }
+
+    /* Header Bar */
+    .header-bar {
+      top: 16px;
+      left: 16px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-main);
+    }
+
+    .brand-tag {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      background: rgba(0, 240, 255, 0.12);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Main Control Sidebar */
+    .sidebar {
+      top: 76px;
+      left: 16px;
+      width: 340px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--panel-border);
+      border-radius: 4px;
+    }
+
+    .section-title {
+      font-family: var(--font-heading);
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      border-bottom: 1px dashed var(--panel-border);
+      padding-bottom: 4px;
+    }
+
+    /* Location Cards */
+    .loc-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .loc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .point-badge {
+      font-family: var(--font-heading);
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+    }
+    .point-alpha { background: rgba(52, 199, 89, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }
+    .point-bravo { background: rgba(255, 59, 48, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+
+    .coords-display {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn {
+      font-family: var(--font-heading);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 8px 12px;
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      background: rgba(0, 240, 255, 0.06);
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: rgba(0, 240, 255, 0.2);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+    }
+
+    .btn-active {
+      background: var(--accent-cyan) !important;
+      color: #000000 !important;
+      border-color: var(--accent-cyan) !important;
+      box-shadow: 0 0 14px rgba(0, 240, 255, 0.4) !important;
+    }
+
+    .btn-danger {
+      background: rgba(255, 59, 48, 0.12);
+      border-color: rgba(255, 59, 48, 0.4);
+      color: var(--accent-red);
+    }
+    .btn-danger:hover {
+      background: rgba(255, 59, 48, 0.3);
+      border-color: var(--accent-red);
+      box-shadow: 0 0 10px rgba(255, 59, 48, 0.3);
+    }
+
+    /* Slider / Controls */
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .control-value {
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      outline: none;
+      accent-color: var(--accent-cyan);
+    }
+
+    .search-box {
+      display: flex;
+      gap: 6px;
+    }
+
+    .search-input {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      padding: 8px 12px;
+      color: var(--text-main);
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .search-input:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+    }
+
+    /* Tactical HUD (Bottom Bar) */
+    .hud-bar {
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .hud-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .hud-label {
+      font-family: var(--font-heading);
+      font-size: 0.65rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .hud-val {
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      margin-top: 2px;
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 28px;
+      background: var(--panel-border);
+    }
+
+    /* Map Custom Marker Labels */
+    .tactical-marker-icon {
+      background: transparent;
+      border: none;
+    }
+    .marker-pin {
+      width: 28px;
+      height: 28px;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 12px rgba(0,0,0,0.5);
+    }
+    .marker-pin::after {
+      content: '';
+      width: 12px;
+      height: 12px;
+      background: #000;
+      border-radius: 50%;
+    }
+    .pin-alpha { background: var(--accent-green); box-shadow: 0 0 12px var(--accent-green); }
+    .pin-bravo { background: var(--accent-red); box-shadow: 0 0 12px var(--accent-red); }
+
+    .marker-text {
+      position: absolute;
+      top: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--font-heading);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      background: rgba(0,0,0,0.85);
+      border-radius: 3px;
+      white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: calc(100vw - 32px);
+        max-height: 40vh;
+      }
+      .hud-bar {
+        width: calc(100vw - 32px);
+        overflow-x: auto;
+        justify-content: space-between;
+        gap: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- Header Panel -->
+  <div class="tactical-panel header-bar">
+    <div class="brand-logo">
+      <div class="status-dot"></div>
+      <div class="brand-title">STRIKE-ZONE OPS</div>
+      <span class="brand-tag">TACTICAL v1.2</span>
+    </div>
+  </div>
+
+  <!-- Main Sidebar -->
+  <div class="tactical-panel sidebar">
+
+    <!-- Target Points Selection -->
+    <div>
+      <div class="section-title">
+        <span>Operation Points</span>
+        <span id="click-status" style="font-size: 0.7rem; color: var(--accent-amber);">Select Alpha</span>
+      </div>
+
+      <div class="btn-group" style="margin-top: 8px;">
+        <button id="btn-set-alpha" class="btn btn-active" onclick="setSelectMode('alpha')">📌 Set Alpha (Start)</button>
+        <button id="btn-set-bravo" class="btn" onclick="setSelectMode('bravo')">🎯 Set Bravo (End)</button>
+      </div>
+    </div>
+
+    <!-- Location Details -->
+    <div class="loc-card">
+      <div class="loc-header">
+        <span class="point-badge point-alpha">ALPHA (START)</span>
+        <span id="alpha-coords" class="coords-display">Click on map</span>
+      </div>
+    </div>
+
+    <div class="loc-card">
+      <div class="loc-header">
+        <span class="point-badge point-bravo">BRAVO (END)</span>
+        <span id="bravo-coords" class="coords-display">Click on map</span>
+      </div>
+    </div>
+
+    <!-- Search Address -->
+    <div class="control-group">
+      <div class="control-label">Search Location</div>
+      <div class="search-box">
+        <input type="text" id="address-input" class="search-input" placeholder="City, landmark, or address..." onkeydown="if(event.key==='Enter') searchAddress()">
+        <button class="btn" onclick="searchAddress()">Search</button>
+      </div>
+    </div>
+
+    <!-- Search Corridor Buffer Controls -->
+    <div class="control-group">
+      <div class="section-title">Search Corridor Width</div>
+      <div class="control-label">
+        <span>Buffer Radius:</span>
+        <span id="buffer-val" class="control-value">500 m</span>
+      </div>
+      <input type="range" id="buffer-slider" min="50" max="5000" step="50" value="500" oninput="updateBuffer(this.value)">
+    </div>
+
+    <!-- Map Tile Imagery Selection -->
+    <div class="control-group">
+      <div class="section-title">Map Imagery Layer</div>
+      <div class="btn-group">
+        <button id="layer-dark" class="btn btn-active" onclick="switchLayer('dark')">Dark Tactical</button>
+        <button id="layer-satellite" class="btn" onclick="switchLayer('satellite')">Satellite</button>
+      </div>
+      <div class="btn-group" style="margin-top: 6px;">
+        <button id="layer-osm" class="btn" onclick="switchLayer('osm')">Street Map</button>
+        <button id="layer-topo" class="btn" onclick="switchLayer('topo')">Topographic</button>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="btn-group" style="margin-top: 8px;">
+      <button class="btn btn-danger" onclick="resetMap()">Clear Map</button>
+      <button class="btn" onclick="exportZoneGeoJSON()">Export GeoJSON</button>
+    </div>
+
+  </div>
+
+  <!-- Bottom HUD Status Bar -->
+  <div class="tactical-panel hud-bar">
+    <div class="hud-stat">
+      <span class="hud-label">Direct Distance</span>
+      <span id="hud-distance" class="hud-val">0.00 km</span>
+    </div>
+    <div class="hud-divider"></div>
+    <div class="hud-stat">
+      <span class="hud-label">Search Area Covered</span>
+      <span id="hud-area" class="hud-val">0.00 sq km</span>
+    </div>
+    <div class="hud-divider"></div>
+    <div class="hud-stat">
+      <span class="hud-label">Corridor Perimeter</span>
+      <span id="hud-perimeter" class="hud-val">0.00 km</span>
+    </div>
+    <div class="hud-divider"></div>
+    <div class="hud-stat">
+      <span class="hud-label">Grid Coordinates</span>
+      <span id="hud-center" class="hud-val">-- , --</span>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwLWR22a3wG36Yg/KxV0jF5q+d4jF861zU+m4qg8l1N5B12u+Z6p2k975000" crossorigin="anonymous"></script>
+  <!-- Turf.js for geodesic calculations and buffering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+
+  <script>
+    // Global State Variables
+    let map;
+    let alphaMarker = null;
+    let bravoMarker = null;
+    let corridorPolygon = null;
+    let routeLine = null;
+    let selectMode = 'alpha'; // 'alpha' or 'bravo'
+    let bufferRadiusMeters = 500;
+    let activeTileLayer = null;
+
+    // Tile Layers Configuration (100% Free - No API Keys required)
+    const tileLayers = {
+      dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }),
+      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxZoom: 19
+      }),
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }),
+      topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap',
+        maxZoom: 17
+      })
+    };
+
+    // Initialize Map
+    function initMap() {
+      // Default location: Washington D.C. area (or user location fallback)
+      map = L.map('map', {
+        center: [38.8951, -77.0364],
+        zoom: 13,
+        zoomControl: false
+      });
+
+      // Add Zoom Control to bottom right
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // Set default tile layer
+      activeTileLayer = tileLayers.dark;
+      activeTileLayer.addTo(map);
+
+      // Map Click Event
+      map.on('click', handleMapClick);
+
+      // Default sample markers (Alpha & Bravo)
+      const defaultAlpha = L.latLng(38.8977, -77.0365); // White House
+      const defaultBravo = L.latLng(38.8895, -77.0091); // US Capitol
+
+      setPoint('alpha', defaultAlpha);
+      setPoint('bravo', defaultBravo);
+
+      // Auto-fit bounds
+      const bounds = L.latLngBounds([defaultAlpha, defaultBravo]);
+      map.fitBounds(bounds, { padding: [100, 100] });
+    }
+
+    // Handle Map Click
+    function handleMapClick(e) {
+      setPoint(selectMode, e.latlng);
+
+      // Toggle mode after placing point
+      if (selectMode === 'alpha') {
+        setSelectMode('bravo');
+      }
+    }
+
+    // Set Point Mode toggle
+    function setSelectMode(mode) {
+      selectMode = mode;
+      document.getElementById('btn-set-alpha').classList.toggle('btn-active', mode === 'alpha');
+      document.getElementById('btn-set-bravo').classList.toggle('btn-active', mode === 'bravo');
+
+      const statusEl = document.getElementById('click-status');
+      if (mode === 'alpha') {
+        statusEl.innerText = 'Click map for Alpha (Start)';
+        statusEl.style.color = 'var(--accent-green)';
+      } else {
+        statusEl.innerText = 'Click map for Bravo (End)';
+        statusEl.style.color = 'var(--accent-red)';
+      }
+    }
+
+    // Create Custom Tactical Pin HTML Icon
+    function createTacticalIcon(label, type) {
+      const pinClass = type === 'alpha' ? 'pin-alpha' : 'pin-bravo';
+      const html = `
+        <div class="tactical-marker-icon">
+          <div class="marker-text">${label}</div>
+          <div class="marker-pin ${pinClass}"></div>
+        </div>
+      `;
+      return L.divIcon({
+        className: 'custom-tactical-div-icon',
+        html: html,
+        iconSize: [30, 30],
+        iconAnchor: [15, 30]
+      });
+    }
+
+    // Set Location Point (Alpha or Bravo)
+    function setPoint(type, latlng) {
+      if (type === 'alpha') {
+        if (alphaMarker) map.removeLayer(alphaMarker);
+        alphaMarker = L.marker(latlng, {
+          draggable: true,
+          icon: createTacticalIcon('ALPHA [START]', 'alpha')
+        }).addTo(map);
+
+        alphaMarker.on('drag', updateTacticalZone);
+        document.getElementById('alpha-coords').innerText = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+      } else {
+        if (bravoMarker) map.removeLayer(bravoMarker);
+        bravoMarker = L.marker(latlng, {
+          draggable: true,
+          icon: createTacticalIcon('BRAVO [TARGET]', 'bravo')
+        }).addTo(map);
+
+        bravoMarker.on('drag', updateTacticalZone);
+        document.getElementById('bravo-coords').innerText = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+      }
+
+      updateTacticalZone();
+    }
+
+    // Update Tactical Search Zone & Corridor Highlight
+    function updateTacticalZone() {
+      if (!alphaMarker || !bravoMarker) return;
+
+      const posA = alphaMarker.getLatLng();
+      const posB = bravoMarker.getLatLng();
+
+      // Update Coords text
+      document.getElementById('alpha-coords').innerText = `${posA.lat.toFixed(5)}, ${posA.lng.toFixed(5)}`;
+      document.getElementById('bravo-coords').innerText = `${posB.lat.toFixed(5)}, ${posB.lng.toFixed(5)}`;
+
+      // Draw Center Line (Line string)
+      if (routeLine) map.removeLayer(routeLine);
+      routeLine = L.polyline([posA, posB], {
+        color: '#00f0ff',
+        weight: 2,
+        dashArray: '6, 6',
+        opacity: 0.8
+      }).addTo(map);
+
+      // Create Buffer Corridor using Turf.js
+      const lineGeoJSON = turf.lineString([[posA.lng, posA.lat], [posB.lng, posB.lat]]);
+      const buffered = turf.buffer(lineGeoJSON, bufferRadiusMeters / 1000, { units: 'kilometers' });
+
+      // Calculate Stats
+      const directDistKm = turf.distance(
+        turf.point([posA.lng, posA.lat]),
+        turf.point([posB.lng, posB.lat]),
+        { units: 'kilometers' }
+      );
+
+      const searchAreaSqKm = turf.area(buffered) / 1000000; // sq meters to sq km
+      const perimeterKm = turf.length(buffered, { units: 'kilometers' });
+
+      const midLat = ((posA.lat + posB.lat) / 2).toFixed(4);
+      const midLng = ((posA.lng + posB.lng) / 2).toFixed(4);
+
+      // Render Corridor Polygon
+      if (corridorPolygon) map.removeLayer(corridorPolygon);
+      corridorPolygon = L.geoJSON(buffered, {
+        style: {
+          color: '#ff3b30',
+          weight: 2,
+          opacity: 0.9,
+          fillColor: '#ff3b30',
+          fillOpacity: 0.25
+        }
+      }).addTo(map);
+
+      // Update HUD Stats
+      document.getElementById('hud-distance').innerText = `${directDistKm.toFixed(2)} km`;
+      document.getElementById('hud-area').innerText = `${searchAreaSqKm.toFixed(2)} sq km`;
+      document.getElementById('hud-perimeter').innerText = `${perimeterKm.toFixed(2)} km`;
+      document.getElementById('hud-center').innerText = `${midLat}, ${midLng}`;
+    }
+
+    // Slider Buffer Update
+    function updateBuffer(val) {
+      bufferRadiusMeters = parseFloat(val);
+      document.getElementById('buffer-val').innerText = bufferRadiusMeters >= 1000
+        ? `${(bufferRadiusMeters / 1000).toFixed(1)} km`
+        : `${bufferRadiusMeters} m`;
+      updateTacticalZone();
+    }
+
+    // Switch Base Map Tile Imagery Layer
+    function switchLayer(layerKey) {
+      if (activeTileLayer) map.removeLayer(activeTileLayer);
+      activeTileLayer = tileLayers[layerKey];
+      activeTileLayer.addTo(map);
+
+      // Update UI active buttons
+      document.querySelectorAll('#layer-dark, #layer-satellite, #layer-osm, #layer-topo').forEach(btn => {
+        btn.classList.remove('btn-active');
+      });
+      document.getElementById(`layer-${layerKey}`).classList.add('btn-active');
+    }
+
+    // Address Search via Nominatim OpenStreetMap API (Free)
+    async function searchAddress() {
+      const query = document.getElementById('address-input').value.trim();
+      if (!query) return;
+
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          const targetLatLng = L.latLng(lat, lon);
+
+          map.setView(targetLatLng, 14);
+          setPoint(selectMode, targetLatLng);
+        } else {
+          alert('Location not found. Please try a different search query.');
+        }
+      } catch (err) {
+        alert('Address search failed. Please check network connection.');
+      }
+    }
+
+    // Reset Map
+    function resetMap() {
+      if (alphaMarker) map.removeLayer(alphaMarker);
+      if (bravoMarker) map.removeLayer(bravoMarker);
+      if (corridorPolygon) map.removeLayer(corridorPolygon);
+      if (routeLine) map.removeLayer(routeLine);
+
+      alphaMarker = null;
+      bravoMarker = null;
+      corridorPolygon = null;
+      routeLine = null;
+
+      document.getElementById('alpha-coords').innerText = 'Click on map';
+      document.getElementById('bravo-coords').innerText = 'Click on map';
+      document.getElementById('hud-distance').innerText = '0.00 km';
+      document.getElementById('hud-area').innerText = '0.00 sq km';
+      document.getElementById('hud-perimeter').innerText = '0.00 km';
+      document.getElementById('hud-center').innerText = '-- , --';
+
+      setSelectMode('alpha');
+    }
+
+    // Export Zone Polygon as GeoJSON file
+    function exportZoneGeoJSON() {
+      if (!corridorPolygon) {
+        alert('Please place Start (Alpha) and End (Bravo) points first to generate a tactical zone.');
+        return;
+      }
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(corridorPolygon.toGeoJSON()));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "tactical_strike_zone.geojson");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', initMap);
+  </script>
+</body>
+</html>
