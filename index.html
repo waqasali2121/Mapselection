@@ -833,26 +833,81 @@
       document.getElementById(`layer-${layerKey}`).classList.add('btn-active');
     }
 
-    // Address Search via Nominatim OpenStreetMap API (Free)
+    // Robust Location Search with Multi-Provider Fallback & Local Context Bias
     async function searchAddress() {
-      const query = document.getElementById('address-input').value.trim();
+      const inputEl = document.getElementById('address-input');
+      let query = inputEl.value.trim();
       if (!query) return;
 
-      try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-        const data = await response.json();
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lon = parseFloat(data[0].lon);
-          const targetLatLng = L.latLng(lat, lon);
+      const statusEl = document.getElementById('click-status');
+      const originalStatus = statusEl.innerText;
+      statusEl.innerText = 'Searching location...';
+      statusEl.style.color = 'var(--accent-cyan)';
 
-          map.setView(targetLatLng, 14);
-          setPoint(selectMode, targetLatLng);
-        } else {
-          alert('Location not found. Please try a different search query.');
+      // Auto-append Pakistan context if user didn't specify country
+      let searchQuery = query;
+      if (!query.toLowerCase().includes('pakistan')) {
+        searchQuery = `${query}, Charsadda, Pakistan`;
+      }
+
+      let lat = null, lon = null, displayName = null;
+
+      // Provider 1: Photon (by Komoot - fast, CORS-friendly, OpenStreetMap based)
+      try {
+        const res1 = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=1`);
+        const data1 = await res1.json();
+        if (data1 && data1.features && data1.features.length > 0) {
+          const coords = data1.features[0].geometry.coordinates;
+          lon = coords[0];
+          lat = coords[1];
+          displayName = data1.features[0].properties.name || query;
         }
-      } catch (err) {
-        alert('Address search failed. Please check network connection.');
+      } catch (e) {
+        console.warn('Photon geocode failed, trying Esri...', e);
+      }
+
+      // Provider 2: Esri World Geocoding Service (fallback)
+      if (!lat || !lon) {
+        try {
+          const res2 = await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&singleLine=${encodeURIComponent(searchQuery)}&maxLocations=1`);
+          const data2 = await res2.json();
+          if (data2 && data2.candidates && data2.candidates.length > 0) {
+            lat = data2.candidates[0].location.y;
+            lon = data2.candidates[0].location.x;
+            displayName = data2.candidates[0].address;
+          }
+        } catch (e) {
+          console.warn('Esri geocode failed, trying Nominatim...', e);
+        }
+      }
+
+      // Provider 3: Nominatim OpenStreetMap (fallback with custom User-Agent header)
+      if (!lat || !lon) {
+        try {
+          const res3 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`, {
+            headers: { 'Accept-Language': 'en' }
+          });
+          const data3 = await res3.json();
+          if (data3 && data3.length > 0) {
+            lat = parseFloat(data3[0].lat);
+            lon = parseFloat(data3[0].lon);
+            displayName = data3[0].display_name;
+          }
+        } catch (e) {
+          console.warn('Nominatim geocode failed...', e);
+        }
+      }
+
+      // Process Result or Show Error
+      if (lat && lon) {
+        const targetLatLng = L.latLng(lat, lon);
+        map.setView(targetLatLng, 14);
+        setPoint(selectMode, targetLatLng);
+        statusEl.innerText = `Found: ${displayName.substring(0, 30)}...`;
+        statusEl.style.color = 'var(--accent-green)';
+      } else {
+        alert(`Could not find location "${query}". Try searching for major places like "Shabqadar", "Tangi", "Prang", "Utmanzai", or "Peshawar".`);
+        statusEl.innerText = originalStatus;
       }
     }
 
