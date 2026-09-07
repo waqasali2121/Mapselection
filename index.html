@@ -379,6 +379,53 @@
       border: 1px solid rgba(255,255,255,0.2);
     }
 
+    /* Police Station Markers */
+    .pin-ps {
+      background: var(--accent-blue);
+      box-shadow: 0 0 12px var(--accent-blue);
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 12px;
+      border: 2px solid #ffffff;
+    }
+
+    .ps-popup {
+      color: #000;
+      font-family: var(--font-body);
+    }
+    .ps-popup-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #0d1424;
+      margin-bottom: 4px;
+    }
+    .ps-popup-sub {
+      font-size: 0.75rem;
+      color: #475569;
+      margin-bottom: 8px;
+    }
+    .ps-btn-group {
+      display: flex;
+      gap: 6px;
+    }
+    .ps-btn {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+    }
+    .ps-btn-alpha { background: #22c55e; }
+    .ps-btn-bravo { background: #ef4444; }
+
     /* Responsive adjustments */
     @media (max-width: 768px) {
       .sidebar {
@@ -470,6 +517,14 @@
       </div>
     </div>
 
+    <!-- Police Stations Layer Toggle -->
+    <div class="control-group">
+      <div class="section-title">Tactical Overlays</div>
+      <button id="btn-toggle-ps" class="btn btn-active" onclick="togglePoliceStations()">
+        👮 Police Stations (10 Active)
+      </button>
+    </div>
+
     <!-- Actions -->
     <div class="btn-group" style="margin-top: 8px;">
       <button class="btn btn-danger" onclick="resetMap()">Clear Map</button>
@@ -516,6 +571,22 @@
     let selectMode = 'alpha'; // 'alpha' or 'bravo'
     let bufferRadiusMeters = 500;
     let activeTileLayer = null;
+    let policeStationMarkers = [];
+    let showPoliceStations = true;
+
+    // Charsadda District Police Stations Dataset
+    const charsaddaPoliceStations = [
+      { name: "PS City Charsadda", lat: 34.1485, lng: 71.7410, area: "Charsadda City Main" },
+      { name: "PS Prang", lat: 34.1332, lng: 71.7450, area: "Prang Town & Riverine" },
+      { name: "PS Utmanzai", lat: 34.1855, lng: 71.7620, area: "Utmanzai Region" },
+      { name: "PS Umarzai", lat: 34.2210, lng: 71.7820, area: "Umarzai Circle" },
+      { name: "PS Tangi", lat: 34.3020, lng: 71.6950, area: "Tangi Tehsil HQ" },
+      { name: "PS Mandani", lat: 34.3640, lng: 71.7480, area: "Mandani Border Sector" },
+      { name: "PS Shabqadar", lat: 34.2150, lng: 71.5540, area: "Shabqadar Town" },
+      { name: "PS Battagram Shabqadar", lat: 34.2580, lng: 71.5210, area: "Battagram Border Circle" },
+      { name: "PS Nisatta", lat: 34.0920, lng: 71.7880, area: "Nisatta / Motorway Interchange" },
+      { name: "PS Khanmai", lat: 34.2650, lng: 71.8420, area: "Khanmai Sector" }
+    ];
 
     // Tile Layers Configuration (100% Free - No API Keys required)
     const tileLayers = {
@@ -569,6 +640,51 @@
       // Auto-fit bounds
       const bounds = L.latLngBounds([defaultAlpha, defaultBravo]);
       map.fitBounds(bounds, { padding: [100, 100] });
+
+      // Render Police Stations Layer
+      renderPoliceStations();
+    }
+
+    // Render Charsadda Police Stations Markers
+    function renderPoliceStations() {
+      // Clear existing
+      policeStationMarkers.forEach(m => map.removeLayer(m));
+      policeStationMarkers = [];
+
+      if (!showPoliceStations) return;
+
+      charsaddaPoliceStations.forEach(ps => {
+        const psIcon = L.divIcon({
+          className: 'custom-ps-div-icon',
+          html: `<div class="pin-ps" title="${ps.name}">👮</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+
+        const popupHTML = `
+          <div class="ps-popup">
+            <div class="ps-popup-title">${ps.name}</div>
+            <div class="ps-popup-sub">Sector: ${ps.area}</div>
+            <div class="ps-btn-group">
+              <button class="ps-btn ps-btn-alpha" onclick="setPoint('alpha', L.latLng(${ps.lat}, ${ps.lng}))">Set Alpha</button>
+              <button class="ps-btn ps-btn-bravo" onclick="setPoint('bravo', L.latLng(${ps.lat}, ${ps.lng}))">Set Bravo</button>
+            </div>
+          </div>
+        `;
+
+        const marker = L.marker([ps.lat, ps.lng], { icon: psIcon })
+          .bindPopup(popupHTML)
+          .addTo(map);
+
+        policeStationMarkers.push(marker);
+      });
+    }
+
+    // Toggle Police Station Visibility
+    function togglePoliceStations() {
+      showPoliceStations = !showPoliceStations;
+      document.getElementById('btn-toggle-ps').classList.toggle('btn-active', showPoliceStations);
+      renderPoliceStations();
     }
 
     // Handle Map Click
