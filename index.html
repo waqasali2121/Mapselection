@@ -402,8 +402,8 @@
   <div class="tactical-panel header-bar">
     <div class="brand-logo">
       <div class="status-dot"></div>
-      <div class="brand-title">STRIKE-ZONE OPS</div>
-      <span class="brand-tag">TACTICAL v1.2</span>
+      <div class="brand-title">CHARSADDA OPS - STRIKE ZONE</div>
+      <span class="brand-tag">KPK POLICE / TACTICAL</span>
     </div>
   </div>
 
@@ -540,9 +540,9 @@
 
     // Initialize Map
     function initMap() {
-      // Default location: Washington D.C. area (or user location fallback)
+      // Default location: Charsadda District, KPK, Pakistan (34.1482° N, 71.7406° E)
       map = L.map('map', {
-        center: [38.8951, -77.0364],
+        center: [34.1482, 71.7406],
         zoom: 13,
         zoomControl: false
       });
@@ -557,9 +557,11 @@
       // Map Click Event
       map.on('click', handleMapClick);
 
-      // Default sample markers (Alpha & Bravo)
-      const defaultAlpha = L.latLng(38.8977, -77.0365); // White House
-      const defaultBravo = L.latLng(38.8895, -77.0091); // US Capitol
+      // Default sample markers in Charsadda District
+      // Alpha: Charsadda Bazaar / City Center (34.1482, 71.7406)
+      // Bravo: Shabqadar / Tangi road direction (34.1750, 71.7100)
+      const defaultAlpha = L.latLng(34.1482, 71.7406);
+      const defaultBravo = L.latLng(34.1750, 71.7100);
 
       setPoint('alpha', defaultAlpha);
       setPoint('bravo', defaultBravo);
