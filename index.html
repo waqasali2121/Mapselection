@@ -363,6 +363,7 @@
     }
     .pin-alpha { background: var(--accent-green); box-shadow: 0 0 12px var(--accent-green); }
     .pin-bravo { background: var(--accent-red); box-shadow: 0 0 12px var(--accent-red); }
+    .pin-waypoint { background: var(--accent-cyan); box-shadow: 0 0 12px var(--accent-cyan); }
 
     .marker-text {
       position: absolute;
@@ -460,28 +461,20 @@
     <!-- Target Points Selection -->
     <div>
       <div class="section-title">
-        <span>Operation Points</span>
-        <span id="click-status" style="font-size: 0.7rem; color: var(--accent-amber);">Select Alpha</span>
+        <span>Waypoint Route Tracker</span>
+        <span id="waypoint-count" style="font-size: 0.7rem; color: var(--accent-cyan);">0 Points</span>
       </div>
 
       <div class="btn-group" style="margin-top: 8px;">
-        <button id="btn-set-alpha" class="btn btn-active" onclick="setSelectMode('alpha')">📌 Set Alpha (Start)</button>
-        <button id="btn-set-bravo" class="btn" onclick="setSelectMode('bravo')">🎯 Set Bravo (End)</button>
+        <button id="btn-add-point" class="btn btn-active" onclick="enableAddMode()">➕ Add Point (Click Map)</button>
+        <button id="btn-clear-points" class="btn btn-danger" onclick="clearAllWaypoints()">🗑️ Clear Route</button>
       </div>
     </div>
 
-    <!-- Location Details -->
-    <div class="loc-card">
-      <div class="loc-header">
-        <span class="point-badge point-alpha">ALPHA (START)</span>
-        <span id="alpha-coords" class="coords-display">Click on map</span>
-      </div>
-    </div>
-
-    <div class="loc-card">
-      <div class="loc-header">
-        <span class="point-badge point-bravo">BRAVO (END)</span>
-        <span id="bravo-coords" class="coords-display">Click on map</span>
+    <!-- Waypoints List -->
+    <div style="margin-top: 12px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; max-height: 140px; overflow-y: auto;">
+      <div id="waypoints-list" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.75rem;">
+        <div style="color: var(--text-muted); text-align: center; padding: 8px;">No waypoints added yet</div>
       </div>
     </div>
 
@@ -525,9 +518,9 @@
       </button>
     </div>
 
-    <!-- Actions -->
+    // Actions
     <div class="btn-group" style="margin-top: 8px;">
-      <button class="btn btn-danger" onclick="resetMap()">Clear Map</button>
+      <button class="btn btn-danger" onclick="clearAllWaypoints()">Clear All Points</button>
       <button class="btn" onclick="exportZoneGeoJSON()">Export GeoJSON</button>
     </div>
 
@@ -564,11 +557,10 @@
   <script>
     // Global State Variables
     let map;
-    let alphaMarker = null;
-    let bravoMarker = null;
+    let waypoints = []; // Array of { id, marker, latlng }
     let corridorPolygon = null;
     let routeLine = null;
-    let selectMode = 'alpha'; // 'alpha' or 'bravo'
+    let pointCircles = []; // End cap circle overlays
     let bufferRadiusMeters = 500;
     let activeTileLayer = null;
     let policeStationMarkers = [];
@@ -628,18 +620,10 @@
       // Map Click Event
       map.on('click', handleMapClick);
 
-      // Default sample markers in Charsadda District
-      // Alpha: Charsadda Bazaar / City Center (34.1482, 71.7406)
-      // Bravo: Shabqadar / Tangi road direction (34.1750, 71.7100)
-      const defaultAlpha = L.latLng(34.1482, 71.7406);
-      const defaultBravo = L.latLng(34.1750, 71.7100);
-
-      setPoint('alpha', defaultAlpha);
-      setPoint('bravo', defaultBravo);
-
-      // Auto-fit bounds
-      const bounds = L.latLngBounds([defaultAlpha, defaultBravo]);
-      map.fitBounds(bounds, { padding: [100, 100] });
+      // Default sample 3-point route in Charsadda District
+      addWaypoint(L.latLng(34.1482, 71.7406), 'Alpha (Start)');
+      addWaypoint(L.latLng(34.1680, 71.7250), 'Waypoint 2');
+      addWaypoint(L.latLng(34.2150, 71.5540), 'Bravo (Shabqadar Target)');
 
       // Render Police Stations Layer
       renderPoliceStations();
@@ -666,8 +650,7 @@
             <div class="ps-popup-title">${ps.name}</div>
             <div class="ps-popup-sub">Sector: ${ps.area}</div>
             <div class="ps-btn-group">
-              <button class="ps-btn ps-btn-alpha" onclick="setPoint('alpha', L.latLng(${ps.lat}, ${ps.lng}))">Set Alpha</button>
-              <button class="ps-btn ps-btn-bravo" onclick="setPoint('bravo', L.latLng(${ps.lat}, ${ps.lng}))">Set Bravo</button>
+              <button class="ps-btn ps-btn-alpha" onclick="addWaypoint(L.latLng(${ps.lat}, ${ps.lng}), '${ps.name}')">Add Waypoint</button>
             </div>
           </div>
         `;
@@ -689,33 +672,15 @@
 
     // Handle Map Click
     function handleMapClick(e) {
-      setPoint(selectMode, e.latlng);
-
-      // Toggle mode after placing point
-      if (selectMode === 'alpha') {
-        setSelectMode('bravo');
-      }
-    }
-
-    // Set Point Mode toggle
-    function setSelectMode(mode) {
-      selectMode = mode;
-      document.getElementById('btn-set-alpha').classList.toggle('btn-active', mode === 'alpha');
-      document.getElementById('btn-set-bravo').classList.toggle('btn-active', mode === 'bravo');
-
-      const statusEl = document.getElementById('click-status');
-      if (mode === 'alpha') {
-        statusEl.innerText = 'Click map for Alpha (Start)';
-        statusEl.style.color = 'var(--accent-green)';
-      } else {
-        statusEl.innerText = 'Click map for Bravo (End)';
-        statusEl.style.color = 'var(--accent-red)';
-      }
+      addWaypoint(e.latlng);
     }
 
     // Create Custom Tactical Pin HTML Icon
-    function createTacticalIcon(label, type) {
-      const pinClass = type === 'alpha' ? 'pin-alpha' : 'pin-bravo';
+    function createTacticalIcon(label, index, total) {
+      let pinClass = 'pin-waypoint';
+      if (index === 0) pinClass = 'pin-alpha';
+      else if (index === total - 1 && total > 1) pinClass = 'pin-bravo';
+
       const html = `
         <div class="tactical-marker-icon">
           <div class="marker-text">${label}</div>
@@ -730,70 +695,137 @@
       });
     }
 
-    // Set Location Point (Alpha or Bravo)
-    function setPoint(type, latlng) {
-      if (type === 'alpha') {
-        if (alphaMarker) map.removeLayer(alphaMarker);
-        alphaMarker = L.marker(latlng, {
-          draggable: true,
-          icon: createTacticalIcon('ALPHA [START]', 'alpha')
-        }).addTo(map);
+    // Add N Waypoint
+    function addWaypoint(latlng, customLabel = null) {
+      const index = waypoints.length;
+      const label = customLabel || (index === 0 ? 'START (P1)' : `POINT ${index + 1}`);
 
-        alphaMarker.on('drag', updateTacticalZone);
-        document.getElementById('alpha-coords').innerText = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
-      } else {
-        if (bravoMarker) map.removeLayer(bravoMarker);
-        bravoMarker = L.marker(latlng, {
-          draggable: true,
-          icon: createTacticalIcon('BRAVO [TARGET]', 'bravo')
-        }).addTo(map);
-
-        bravoMarker.on('drag', updateTacticalZone);
-        document.getElementById('bravo-coords').innerText = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
-      }
-
-      updateTacticalZone();
-    }
-
-    // Update Tactical Search Zone & Corridor Highlight
-    function updateTacticalZone() {
-      if (!alphaMarker || !bravoMarker) return;
-
-      const posA = alphaMarker.getLatLng();
-      const posB = bravoMarker.getLatLng();
-
-      // Update Coords text
-      document.getElementById('alpha-coords').innerText = `${posA.lat.toFixed(5)}, ${posA.lng.toFixed(5)}`;
-      document.getElementById('bravo-coords').innerText = `${posB.lat.toFixed(5)}, ${posB.lng.toFixed(5)}`;
-
-      // Draw Center Line (Line string)
-      if (routeLine) map.removeLayer(routeLine);
-      routeLine = L.polyline([posA, posB], {
-        color: '#00f0ff',
-        weight: 2,
-        dashArray: '6, 6',
-        opacity: 0.8
+      const marker = L.marker(latlng, {
+        draggable: true,
+        icon: createTacticalIcon(label, index, waypoints.length + 1)
       }).addTo(map);
 
-      // Create Buffer Corridor using Turf.js
-      const lineGeoJSON = turf.lineString([[posA.lng, posA.lat], [posB.lng, posB.lat]]);
+      const wpObj = {
+        id: Date.now() + Math.random(),
+        marker: marker,
+        latlng: latlng,
+        label: label
+      };
+
+      marker.on('drag', () => {
+        wpObj.latlng = marker.getLatLng();
+        updateTacticalZone();
+        renderWaypointsList();
+      });
+
+      waypoints.push(wpObj);
+      updateMarkerIcons();
+      updateTacticalZone();
+      renderWaypointsList();
+    }
+
+    // Update icons labels when order changes
+    function updateMarkerIcons() {
+      const total = waypoints.length;
+      waypoints.forEach((wp, idx) => {
+        let label = wp.label;
+        if (idx === 0) label = 'P1 (START)';
+        else if (idx === total - 1) label = `P${idx + 1} (END)`;
+        else label = `P${idx + 1}`;
+
+        wp.label = label;
+        wp.marker.setIcon(createTacticalIcon(label, idx, total));
+      });
+    }
+
+    // Remove single waypoint
+    function removeWaypoint(idx) {
+      if (waypoints[idx]) {
+        map.removeLayer(waypoints[idx].marker);
+        waypoints.splice(idx, 1);
+        updateMarkerIcons();
+        updateTacticalZone();
+        renderWaypointsList();
+      }
+    }
+
+    // Render list in sidebar
+    function renderWaypointsList() {
+      const container = document.getElementById('waypoints-list');
+      document.getElementById('waypoint-count').innerText = `${waypoints.length} Points`;
+
+      if (waypoints.length === 0) {
+        container.innerHTML = `<div style="color: var(--text-muted); text-align: center; padding: 8px;">No waypoints added yet. Click map to add P1, P2... P-N</div>`;
+        return;
+      }
+
+      container.innerHTML = waypoints.map((wp, idx) => `
+        <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 6px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">
+          <span style="font-weight: 700; color: ${idx === 0 ? 'var(--accent-green)' : (idx === waypoints.length - 1 ? 'var(--accent-red)' : 'var(--accent-cyan)')};">
+            ${wp.label}
+          </span>
+          <span style="font-family: var(--font-mono); color: var(--text-muted); font-size: 0.7rem;">
+            ${wp.latlng.lat.toFixed(4)}, ${wp.latlng.lng.toFixed(4)}
+          </span>
+          <button onclick="removeWaypoint(${idx})" style="background: none; border: none; color: var(--accent-red); cursor: pointer; font-weight: bold;">✕</button>
+        </div>
+      `).join('');
+    }
+
+    // Update Tactical N-Point Search Corridor Highlight
+    function updateTacticalZone() {
+      // Clear old layers
+      if (routeLine) map.removeLayer(routeLine);
+      if (corridorPolygon) map.removeLayer(corridorPolygon);
+      pointCircles.forEach(c => map.removeLayer(c));
+      pointCircles = [];
+
+      if (waypoints.length === 0) {
+        document.getElementById('hud-distance').innerText = '0.00 km';
+        document.getElementById('hud-area').innerText = '0.00 sq km';
+        document.getElementById('hud-perimeter').innerText = '0.00 km';
+        document.getElementById('hud-center').innerText = '-- , --';
+        return;
+      }
+
+      const latlngs = waypoints.map(w => w.latlng);
+
+      // Single point circle highlighting
+      if (waypoints.length === 1) {
+        const p1 = waypoints[0].latlng;
+        const circle = L.circle(p1, {
+          radius: bufferRadiusMeters,
+          color: '#ff3b30',
+          fillColor: '#ff3b30',
+          fillOpacity: 0.25,
+          weight: 2
+        }).addTo(map);
+        pointCircles.push(circle);
+
+        const areaSqKm = (Math.PI * Math.pow(bufferRadiusMeters, 2)) / 1000000;
+        document.getElementById('hud-distance').innerText = '0.00 km';
+        document.getElementById('hud-area').innerText = `${areaSqKm.toFixed(2)} sq km`;
+        document.getElementById('hud-perimeter').innerText = `${((2 * Math.PI * bufferRadiusMeters) / 1000).toFixed(2)} km`;
+        document.getElementById('hud-center').innerText = `${p1.lat.toFixed(4)}, ${p1.lng.toFixed(4)}`;
+        return;
+      }
+
+      // Draw Multi-segment Route Polyline
+      routeLine = L.polyline(latlngs, {
+        color: '#00f0ff',
+        weight: 3,
+        dashArray: '6, 6',
+        opacity: 0.9
+      }).addTo(map);
+
+      // Construct GeoJSON LineString for N-Points
+      const coords = waypoints.map(w => [w.latlng.lng, w.latlng.lat]);
+      const lineGeoJSON = turf.lineString(coords);
+
+      // Calculate Turf Buffer Corridor (creates highlight around start-to-end path)
       const buffered = turf.buffer(lineGeoJSON, bufferRadiusMeters / 1000, { units: 'kilometers' });
 
-      // Calculate Stats
-      const directDistKm = turf.distance(
-        turf.point([posA.lng, posA.lat]),
-        turf.point([posB.lng, posB.lat]),
-        { units: 'kilometers' }
-      );
-
-      const searchAreaSqKm = turf.area(buffered) / 1000000; // sq meters to sq km
-      const perimeterKm = turf.length(buffered, { units: 'kilometers' });
-
-      const midLat = ((posA.lat + posB.lat) / 2).toFixed(4);
-      const midLng = ((posA.lng + posB.lng) / 2).toFixed(4);
-
-      // Render Corridor Polygon
-      if (corridorPolygon) map.removeLayer(corridorPolygon);
+      // Draw Corridor Polygon Overlay
       corridorPolygon = L.geoJSON(buffered, {
         style: {
           color: '#ff3b30',
@@ -804,8 +836,31 @@
         }
       }).addTo(map);
 
+      // Draw start and end cap circles for clean visual search boundary
+      waypoints.forEach((wp) => {
+        const c = L.circle(wp.latlng, {
+          radius: bufferRadiusMeters,
+          color: '#ff3b30',
+          fillColor: '#ff3b30',
+          fillOpacity: 0.15,
+          weight: 1,
+          dashArray: '3, 3'
+        }).addTo(map);
+        pointCircles.push(c);
+      });
+
+      // Calculate Total Tracked Route Distance & Zone Area
+      const routeLengthKm = turf.length(lineGeoJSON, { units: 'kilometers' });
+      const searchAreaSqKm = turf.area(buffered) / 1000000;
+      const perimeterKm = turf.length(buffered, { units: 'kilometers' });
+
+      // Center Lat Lng calculation
+      const midIdx = Math.floor(waypoints.length / 2);
+      const midLat = waypoints[midIdx].latlng.lat.toFixed(4);
+      const midLng = waypoints[midIdx].latlng.lng.toFixed(4);
+
       // Update HUD Stats
-      document.getElementById('hud-distance').innerText = `${directDistKm.toFixed(2)} km`;
+      document.getElementById('hud-distance').innerText = `${routeLengthKm.toFixed(2)} km`;
       document.getElementById('hud-area').innerText = `${searchAreaSqKm.toFixed(2)} sq km`;
       document.getElementById('hud-perimeter').innerText = `${perimeterKm.toFixed(2)} km`;
       document.getElementById('hud-center').innerText = `${midLat}, ${midLng}`;
@@ -911,26 +966,16 @@
       }
     }
 
-    // Reset Map
-    function resetMap() {
-      if (alphaMarker) map.removeLayer(alphaMarker);
-      if (bravoMarker) map.removeLayer(bravoMarker);
-      if (corridorPolygon) map.removeLayer(corridorPolygon);
-      if (routeLine) map.removeLayer(routeLine);
+    // Reset Map / Clear Waypoints
+    function clearAllWaypoints() {
+      waypoints.forEach(wp => map.removeLayer(wp.marker));
+      waypoints = [];
+      updateTacticalZone();
+      renderWaypointsList();
+    }
 
-      alphaMarker = null;
-      bravoMarker = null;
-      corridorPolygon = null;
-      routeLine = null;
-
-      document.getElementById('alpha-coords').innerText = 'Click on map';
-      document.getElementById('bravo-coords').innerText = 'Click on map';
-      document.getElementById('hud-distance').innerText = '0.00 km';
-      document.getElementById('hud-area').innerText = '0.00 sq km';
-      document.getElementById('hud-perimeter').innerText = '0.00 km';
-      document.getElementById('hud-center').innerText = '-- , --';
-
-      setSelectMode('alpha');
+    function enableAddMode() {
+      alert('Click anywhere on the map to add Point 1, Point 2, Point 3... Point N.');
     }
 
     // Export Zone Polygon as GeoJSON file
